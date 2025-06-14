@@ -1,11 +1,20 @@
 const express = require("express");
 const { OAuth2Client } = require("google-auth-library");
 const jwt = require("jsonwebtoken");
+const jwksClient = require('jwks-rsa');
 const User = require("./userModel");
 const router = express.Router();
 
 // Initialize Google OAuth2 client
 const client = new OAuth2Client();
+
+// Initialize JWKS client for Apple
+const appleJwksClient = jwksClient({
+  jwksUri: 'https://appleid.apple.com/auth/keys',
+  cache: true,
+  rateLimit: true,
+  jwksRequestsPerMinute: 5
+});
 
 // JWT secret from environment variables
 const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-jwt-key";
@@ -135,6 +144,148 @@ router.post("/google/signin", async (req, res) => {
 
   } catch (error) {
     console.error("Google authentication error:", error);
+    res.status(500).json({
+      success: false,
+      error: "Authentication failed. Please try again.",
+    });
+  }
+});
+
+// Verify Apple ID token and create/login user
+router.post("/apple/signin", async (req, res) => {
+  try {
+    const { identityToken, authorizationCode, firstName, lastName } = req.body;
+
+    if (!identityToken) {
+      return res.status(400).json({
+        success: false,
+        error: "Identity token is required",
+      });
+    }
+
+    // Verify the Apple ID token
+    const decodedToken = jwt.decode(identityToken, { complete: true });
+    if (!decodedToken) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid identity token",
+      });
+    }
+
+    // Get the key ID from the token header
+    const kid = decodedToken.header.kid;
+
+    // Get the public key from Apple's JWKS
+    const key = await appleJwksClient.getSigningKey(kid);
+    const publicKey = key.getPublicKey();
+
+    // Verify the token
+    const verifiedToken = jwt.verify(identityToken, publicKey, {
+      algorithms: ['RS256'],
+      audience: 'com.jobos.mobile', // app's bundle ID
+      issuer: 'https://appleid.apple.com',
+    });
+
+    // Extract user information
+    const { sub: appleId, email } = verifiedToken;
+
+    // Check if user already exists
+    let user = await User.findOne({ appleId });
+
+    if (!user) {
+      // Create new user
+      // Extract username from email (part before @) or use a default
+      const emailUsername = email ? email.split('@')[0] : 'appleuser';
+      const username = await generateUsername(emailUsername);
+      
+      user = new User({
+        appleId,
+        username,
+        email,
+        firstName: firstName || '',
+        lastName: lastName || '',
+        onboardingCompleted: false,
+        isActive: true,
+        emailVerified: true,
+        createdAt: new Date(),
+        lastLoginAt: new Date(),
+      });
+
+      await user.save();
+      console.log("New user created with Apple Sign In:", user.email, `Name: ${firstName} ${lastName}`);
+    } else {
+      // Update existing user's last login and name if provided
+      user.lastLoginAt = new Date();
+      
+      // Update name if provided and not already set
+      if (firstName && !user.firstName) {
+        user.firstName = firstName;
+      }
+      if (lastName && !user.lastName) {
+        user.lastName = lastName;
+      }
+      
+      await user.save();
+      console.log("Existing user logged in with Apple Sign In:", user.email);
+    }
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        userId: user._id, 
+        email: user.email,
+        username: user.username 
+      },
+      JWT_SECRET,
+      { expiresIn: "30d" }
+    );
+
+    res.json({
+      success: true,
+      message: "Authentication successful",
+      data: {
+        user: {
+          _id: user._id,
+          appleId: user.appleId,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          phone: user.phone,
+          linkedin: user.linkedin,
+          github: user.github,
+          username: user.username,
+          profilePicture: user.profilePicture,
+          onboardingCompleted: user.onboardingCompleted,
+          isActive: user.isActive,
+          preferences: {
+            domains: [],
+            salaryRange: { min: 0, max: 200000 },
+            experience: 'mid',
+            specificSkills: [],
+            jobTypes: ['full-time'],
+            locations: [],
+            remotePreference: 'any'
+          },
+          subscription: {
+            plan: 'free',
+            expiresAt: null,
+            trialUsed: false
+          },
+          applicationSettings: {
+            autoApply: false,
+            maxApplicationsPerDay: 10,
+            minJobMatchScore: 70
+          },
+          createdAt: user.createdAt,
+          lastLoginAt: user.lastLoginAt,
+          updatedAt: user.updatedAt || user.lastLoginAt,
+        },
+        token: token,
+      },
+    });
+
+  } catch (error) {
+    console.error("Apple authentication error:", error);
     res.status(500).json({
       success: false,
       error: "Authentication failed. Please try again.",
@@ -405,7 +556,7 @@ router.put("/profile", async (req, res) => {
 
 // Helper function to generate username
 const generateUsername = async (fullName) => {
-  if (!fullName) return `user_${Date.now()}`;
+  if (!fullName) return `user_${Date.now()}`.substring(0, 20);
 
   let username = fullName
     .trim()
@@ -413,13 +564,22 @@ const generateUsername = async (fullName) => {
     .replace(/[^a-zA-Z0-9 ]/g, "")
     .replace(/\s+/g, "_");
 
+  // Truncate to maximum 15 characters to leave room for uniqueness suffix
+  username = username.substring(0, 15);
+
   // Check if username exists and make it unique
-  const existingUser = await User.findOne({ username });
-  if (existingUser) {
-    username = `${username}_${Date.now()}`;
+  let finalUsername = username;
+  let counter = 1;
+  
+  while (await User.findOne({ username: finalUsername })) {
+    const suffix = `_${counter}`;
+    // Ensure the final username doesn't exceed 20 characters
+    const maxBaseLength = 20 - suffix.length;
+    finalUsername = username.substring(0, maxBaseLength) + suffix;
+    counter++;
   }
 
-  return username;
+  return finalUsername;
 };
 
 module.exports = router; 

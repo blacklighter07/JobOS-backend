@@ -75,6 +75,7 @@ const UserSchema = new Schema({
     unique: true,
     sparse: true, // Allows this field to be optional
   },
+  appleId: String,
   fcmToken: {
     type: String, // Firebase Cloud Messaging token for push notifications
     sparse: true
@@ -110,7 +111,8 @@ const UserSchema = new Schema({
   applicationSettings: {
     autoApply: { type: Boolean, default: false },
     maxApplicationsPerDay: { type: Number, default: 5 },
-    minJobMatchScore: { type: Number, default: 70 }
+    minJobMatchScore: { type: Number, default: 70 },
+    resumeAutoOptimize: { type: Boolean, default: true },
   },
   
   subscription: {
@@ -140,6 +142,10 @@ const UserSchema = new Schema({
   
   onboardingCompleted: { type: Boolean, default: false },
   isActive: { type: Boolean, default: true },
+  emailVerified: {
+    type: Boolean,
+    default: false,
+  },
   lastLoginAt: Date,
   
   // Legacy fields
@@ -157,9 +163,8 @@ const UserSchema = new Schema({
 
 // Instance methods
 UserSchema.methods.hasPremiumAccess = function() {
-  return this.subscription.plan === 'premium' && 
-         this.subscription.status === 'active' &&
-         (!this.subscription.endDate || this.subscription.endDate > new Date());
+  // Made free for all users - no premium subscription required
+  return true;
 };
 
 UserSchema.methods.getFullName = function() {
@@ -179,6 +184,12 @@ UserSchema.statics.findByEmail = function(email) {
 UserSchema.statics.findActiveUsers = function() {
   return this.find({ isActive: true });
 };
+
+// Update the updatedAt field before saving
+UserSchema.pre('save', function(next) {
+  this.updatedAt = new Date();
+  next();
+});
 
 const User = mongoose.model("User", UserSchema);
 

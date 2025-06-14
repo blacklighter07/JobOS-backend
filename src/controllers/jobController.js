@@ -1,6 +1,8 @@
 const jobScrapingService = require('../services/jobScrapingService');
 const llmService = require('../services/llmService');
 const Resume = require('../models/Resume');
+const { optimizeResumeWithAI, extractResumeMetadata } = require('../services/resumeService');
+const User = require('../../services/authentication/userModel');
 
 // Process shared job from LinkedIn
 const processSharedJob = async (req, res) => {
@@ -112,7 +114,9 @@ const optimizeResumeForJob = async (req, res) => {
     console.log('🎯 Optimizing resume for job:', {
       resumeId,
       jobTitle: jobDetails.title,
-      company: jobDetails.company
+      company: jobDetails.company,
+      hasJobDescription: !!jobDetails.description,
+      skillsCount: jobDetails.skills?.length || 0
     });
 
     // Find the selected resume
@@ -129,18 +133,47 @@ const optimizeResumeForJob = async (req, res) => {
       });
     }
 
+    // Get user for preferences
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
     // Create optimization prompt using markdownContent if available, otherwise originalContent
     const resumeContent = selectedResume.markdownContent || selectedResume.originalContent;
-    const optimizationPrompt = createJobOptimizationPrompt(
+
+    console.log('🤖 Generating optimized resume with enhanced AI service...');
+    console.log('🎯 Job details for optimization:', jobDetails);
+
+    // Use the same high-quality optimization function as regular resume optimization
+    // This includes better prompt engineering and job-specific tailoring
+    const optimizedContent = await optimizeResumeWithAI(
       resumeContent,
       jobDetails,
-      optimizationNote
+      jobDetails.title, // targetRole
+      jobDetails.skills || [], // targetSkills
+      user.preferences || {} // userPreferences
     );
 
-    console.log('🤖 Generating optimized resume with LLM...');
+    // Extract new metadata for the optimized resume
+    const newMetadata = await extractResumeMetadata(optimizedContent);
 
-    // Generate optimized resume using LLM
-    const optimizedContent = await llmService.callGemini(optimizationPrompt);
+    // Calculate optimization score based on new metadata
+    const calculateOptimizationScore = (metadata, content) => {
+      let score = 0;
+      if (metadata.contact?.email) score += 10;
+      if (metadata.contact?.phone) score += 10;
+      if (metadata.skills?.length > 5) score += 20;
+      if (metadata.experience?.positions?.length > 0) score += 30;
+      if (metadata.education?.length > 0) score += 15;
+      if (content.includes('achievement') || content.includes('accomplish')) score += 15;
+      return Math.min(score, 100);
+    };
+
+    const optimizationScore = calculateOptimizationScore(newMetadata, optimizedContent);
 
     // Create new resume with optimized content
     const optimizedResumeName = (resumeName || `${jobDetails.company} - ${jobDetails.title}`).substring(0, 100);
@@ -152,9 +185,9 @@ const optimizeResumeForJob = async (req, res) => {
       markdownContent: optimizedContent,
       isActive: true,
       format: selectedResume.format || 'ats',
-      optimizationScore: 85, // Default score for LinkedIn job optimizations
+      optimizationScore: optimizationScore,
       metadata: {
-        ...selectedResume.metadata,
+        ...newMetadata,
         optimizedFor: {
           jobId: jobDetails.jobId,
           jobTitle: jobDetails.title,
@@ -167,15 +200,24 @@ const optimizeResumeForJob = async (req, res) => {
       lastOptimizedAt: new Date()
     });
 
+    console.log(`✅ New optimized resume created successfully: ${optimizedResume._id} (optimized from ${resumeId})`);
+    
     res.json({
       success: true,
-      message: 'Resume optimized successfully',
+      message: 'Resume optimized successfully for job posting',
       data: {
         optimizedResume: {
           _id: optimizedResume._id,
+          userId: optimizedResume.userId,
           name: optimizedResume.name,
-          content: optimizedResume.markdownContent,
-          createdAt: optimizedResume.createdAt
+          markdownContent: optimizedResume.markdownContent,
+          metadata: optimizedResume.metadata,
+          format: optimizedResume.format,
+          optimizationScore: optimizedResume.optimizationScore,
+          isActive: optimizedResume.isActive,
+          createdAt: optimizedResume.createdAt,
+          updatedAt: optimizedResume.updatedAt,
+          optimizedFrom: optimizedResume.optimizedFrom
         },
         jobDetails
       }

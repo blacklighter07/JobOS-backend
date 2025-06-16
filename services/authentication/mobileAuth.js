@@ -154,7 +154,7 @@ router.post("/google/signin", async (req, res) => {
 // Verify Apple ID token and create/login user
 router.post("/apple/signin", async (req, res) => {
   try {
-    const { identityToken, authorizationCode, firstName, lastName } = req.body;
+    const { identityToken, user: userIdentifier, firstName, lastName } = req.body;
 
     if (!identityToken) {
       return res.status(400).json({
@@ -550,6 +550,61 @@ router.put("/profile", async (req, res) => {
     res.status(500).json({
       success: false,
       error: "Failed to update profile",
+    });
+  }
+});
+
+// Delete account endpoint
+router.delete("/account", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
+        success: false,
+        error: "No token provided",
+      });
+    }
+
+    const token = authHeader.substring(7);
+    const decoded = jwt.verify(token, JWT_SECRET);
+    
+    const user = await User.findById(decoded.userId);
+    if (!user || !user.isActive) {
+      return res.status(401).json({
+        success: false,
+        error: "User not found or inactive",
+      });
+    }
+
+    // Import Resume model
+    const Resume = require('../../src/models/Resume');
+
+    // First, find all resumes associated with the user
+    const userResumes = await Resume.find({ userId: user._id });
+    console.log(`Found ${userResumes.length} resumes for user ${user.email}`);
+
+    // Delete all user resumes
+    const deleteResult = await Resume.deleteMany({ userId: user._id });
+    console.log(`Deleted ${deleteResult.deletedCount} resumes for user ${user.email}`);
+
+    // Delete the user account
+    await User.findByIdAndDelete(user._id);
+    console.log(`Deleted user account: ${user.email}`);
+
+    res.json({
+      success: true,
+      message: "Account and all associated data deleted successfully",
+      data: {
+        deletedResumes: deleteResult.deletedCount,
+        deletedUser: true
+      }
+    });
+
+  } catch (error) {
+    console.error("Account deletion error:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to delete account. Please try again.",
     });
   }
 });

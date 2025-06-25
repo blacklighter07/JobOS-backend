@@ -196,7 +196,11 @@ class LLMService {
         
         Return a well-formatted cover letter that:
         - Addresses the specific role and company
-        - Highlights relevant experience and skills
+        - Highlights relevant experience and skills, especially positions of responsibility
+        - Emphasizes leadership roles, management experience, and decision-making authority
+        - Uses power words that convey responsibility and impact
+        - Quantifies achievements related to team leadership, budget management, or project scope
+        - Demonstrates strategic thinking and business impact
         - Shows enthusiasm for the position
         - Is professional yet personable
         - Is approximately 300-400 words
@@ -220,10 +224,16 @@ class LLMService {
         
         Improvements to make:
         - Use standard section headers
-        - Include more relevant keywords
+        - Include more relevant keywords, especially leadership and responsibility terms
         - Improve formatting for ATS readability
-        - Optimize bullet points for impact
+        - Optimize bullet points for impact, emphasizing positions of responsibility
         - Ensure proper formatting
+        - Highlight leadership roles, management experience, and decision-making authority
+        - Use power words that convey responsibility (led, managed, directed, supervised, coordinated, spearheaded)
+        - Quantify team sizes, budgets managed, or scope of responsibility
+        - Emphasize strategic planning, execution capabilities, and business impact
+        - Showcase cross-functional collaboration and stakeholder management
+        - Demonstrate progression in responsibility levels throughout career
         
         Return the optimized resume in markdown format.
       `;
@@ -290,9 +300,21 @@ class LLMService {
       - Follow with contact information on separate lines
       - Use standard section headers (Professional Summary, Experience, Education, Skills)
       - Include quantified achievements in bullet points
-      - Use action verbs (Developed, Managed, Implemented, Led, etc.)
+      - Use strong action verbs and leadership language (Developed, Managed, Implemented, Led, Directed, Supervised, Coordinated, Spearheaded)
+      - Emphasize positions of responsibility, leadership roles, and management experience
+      - Showcase decision-making authority, team leadership, and project ownership
+      - Highlight cross-functional collaboration and stakeholder management
+      - Demonstrate impact on business outcomes and strategic initiatives
       - Make it ATS-friendly with proper keywords
       - Ensure proper markdown formatting
+      
+      LEADERSHIP AND RESPONSIBILITY FOCUS:
+      - Use power words that convey leadership and responsibility
+      - Quantify team sizes, budgets managed, or scope of responsibility where applicable
+      - Emphasize strategic planning and execution capabilities
+      - Highlight mentoring, training, and people development activities
+      - Show progression in responsibility levels throughout career
+      - Demonstrate ability to influence and drive results across teams
       
       FORMAT TEMPLATE:
       
@@ -361,9 +383,16 @@ class LLMService {
       Instructions:
       - Reorder sections to highlight most relevant experience first
       - Emphasize skills and keywords from the job description
-      - Quantify achievements where possible
+      - Quantify achievements where possible, especially those showing leadership impact
       - Maintain all factual information
       - Optimize for ATS scanning
+      - Highlight positions of responsibility and leadership roles that align with the job requirements
+      - Emphasize decision-making authority, team leadership, and project ownership relevant to the role
+      - Use power words that convey leadership (led, managed, directed, supervised, coordinated, spearheaded)
+      - Showcase cross-functional collaboration and stakeholder management experience
+      - Demonstrate impact on business outcomes and strategic initiatives
+      - Show progression in responsibility levels that match the job's seniority level
+      - Quantify team sizes, budgets managed, or scope of responsibility where relevant to the position
       
       Return ONLY the tailored resume content in clean markdown format. Do not include any JSON wrapping or explanations - just the raw markdown content.
     `;
@@ -375,7 +404,7 @@ class LLMService {
       messages: [
         {
           role: 'system',
-          content: 'You are an expert resume writer and career coach. Provide professional, accurate, and helpful responses.'
+          content: 'You are an expert resume writer and career coach specializing in highlighting leadership experience and positions of responsibility. Provide professional, accurate, and helpful responses that emphasize career progression, management experience, and strategic impact. Focus on quantified achievements, team leadership, and business outcomes.'
         },
         {
           role: 'user',

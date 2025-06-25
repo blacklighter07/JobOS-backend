@@ -54,10 +54,22 @@ const optimizeResumeWithAI = async (resumeContent, jobDetails = null, targetRole
   try {
     let prompt = `Please optimize the following resume to make it more ATS-friendly and compelling. Focus on:
 1. Adding quantified achievements where possible
-2. Using strong action verbs
+2. Using strong action verbs and leadership language
 3. Optimizing keywords for applicant tracking systems
 4. Improving formatting and readability
 5. Highlighting relevant skills and experience
+6. Emphasizing positions of responsibility, leadership roles, and management experience
+7. Showcasing decision-making authority, team leadership, and project ownership
+8. Highlighting cross-functional collaboration and stakeholder management
+9. Demonstrating impact on business outcomes and strategic initiatives
+
+When highlighting positions of responsibility, ensure to:
+- Use power words that convey leadership (led, managed, directed, supervised, coordinated, spearheaded)
+- Quantify team sizes, budgets managed, or scope of responsibility
+- Emphasize strategic planning and execution capabilities
+- Highlight mentoring, training, and people development activities
+- Show progression in responsibility levels throughout career
+- Demonstrate ability to influence and drive results across teams
 
 Resume Content:
 ${resumeContent}`;

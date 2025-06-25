@@ -1407,11 +1407,21 @@ const deleteResume = async (req, res) => {
       });
     }
 
-    // Soft delete by setting isActive to false
-    resume.isActive = false;
-    await resume.save();
+    // Hard delete - completely remove from database
+    await Resume.findByIdAndDelete(resumeId);
 
-    console.log(`✅ Resume deleted successfully: ${resumeId}`);
+    // Also clean up any resumes that were optimized from this deleted resume
+    // by setting their optimizedFrom field to null
+    const optimizedResumes = await Resume.updateMany(
+      { optimizedFrom: resumeId },
+      { $unset: { optimizedFrom: 1 } }
+    );
+
+    if (optimizedResumes.modifiedCount > 0) {
+      console.log(`🔗 Cleaned up ${optimizedResumes.modifiedCount} optimized resumes that referenced deleted resume: ${resumeId}`);
+    }
+
+    console.log(`✅ Resume permanently deleted from database: ${resumeId}`);
     res.json({
       success: true,
       message: 'Resume deleted successfully'

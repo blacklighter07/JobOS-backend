@@ -166,7 +166,7 @@ const enhanceResumeHTML = (htmlContent) => {
   return htmlContent;
 };
 
-// Save PDF buffer to storage
+// Save PDF buffer to storage with automatic cleanup after 2 minutes
 const savePDFToStorage = async (buffer, fileName) => {
   try {
     // In production, save to cloud storage (AWS S3, GCS, etc.)
@@ -183,8 +183,33 @@ const savePDFToStorage = async (buffer, fileName) => {
     const filePath = path.join(uploadsDir, fileName);
     await fs.writeFile(filePath, buffer);
 
-    // Return URL or file path
-    const baseUrl = process.env.BASE_URL || 'http://localhost:5001';
+    // Schedule automatic deletion after 2 minutes (120000 milliseconds)
+    setTimeout(async () => {
+      try {
+        await fs.unlink(filePath);
+        console.log(`🗑️ Auto-deleted PDF after 2 minutes: ${fileName}`);
+      } catch (error) {
+        // File might already be deleted or not exist, which is fine
+        if (error.code !== 'ENOENT') {
+          console.error(`Error auto-deleting PDF ${fileName}:`, error);
+        }
+      }
+    }, 120000); // 2 minutes = 120,000 milliseconds
+
+    console.log(`📄 PDF saved with 2-minute auto-cleanup: ${fileName}`);
+
+    // Determine the correct base URL based on environment
+    let baseUrl = process.env.BASE_URL;
+    
+    if (!baseUrl) {
+      // If BASE_URL is not set, determine it based on environment
+      if (process.env.NODE_ENV === 'production') {
+        baseUrl = 'https://api.tokyorusk.com';
+      } else {
+        baseUrl = 'http://localhost:5001';
+      }
+    }
+
     return `${baseUrl}/uploads/resumes/${fileName}`;
 
   } catch (error) {
@@ -647,34 +672,55 @@ const generateApplicationPDF = async (resumeContent, coverLetter, jobDetails, us
   }
 };
 
-// Clean up old PDF files
-const cleanupOldPDFs = async (olderThanDays = 30) => {
+// Manual cleanup function for old PDF files (fallback for any missed files)
+const cleanupOldPDFs = async (olderThanMinutes = 5) => {
   try {
     const uploadsDir = path.join(__dirname, '../../uploads/resumes');
+    
+    // Check if directory exists
+    try {
+      await fs.access(uploadsDir);
+    } catch {
+      return; // Directory doesn't exist, nothing to clean
+    }
+
     const files = await fs.readdir(uploadsDir);
     
     const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
+    cutoffDate.setMinutes(cutoffDate.getMinutes() - olderThanMinutes);
     
+    let cleanedCount = 0;
     for (const file of files) {
       const filePath = path.join(uploadsDir, file);
-      const stats = await fs.stat(filePath);
-      
-      if (stats.mtime < cutoffDate) {
-        await fs.unlink(filePath);
-        console.log(`Cleaned up old PDF: ${file}`);
+      try {
+        const stats = await fs.stat(filePath);
+        
+        if (stats.mtime < cutoffDate) {
+          await fs.unlink(filePath);
+          cleanedCount++;
+          console.log(`🧹 Manual cleanup: ${file}`);
+        }
+      } catch (error) {
+        // File might have been deleted already, skip
+        if (error.code !== 'ENOENT') {
+          console.error(`Error during manual cleanup of ${file}:`, error);
+        }
       }
     }
     
+    if (cleanedCount > 0) {
+      console.log(`🧹 Manual cleanup completed: ${cleanedCount} files removed`);
+    }
+    
   } catch (error) {
-    console.error('Error cleaning up old PDFs:', error);
+    console.error('Error during manual PDF cleanup:', error);
   }
 };
 
-// Schedule cleanup every day at 3 AM
+// Schedule manual cleanup every 10 minutes to catch any missed files
 const cron = require('node-cron');
-cron.schedule('0 3 * * *', () => {
-  cleanupOldPDFs();
+cron.schedule('*/10 * * * *', () => {
+  cleanupOldPDFs(5); // Clean files older than 5 minutes
 });
 
 module.exports = {
